@@ -115,15 +115,14 @@ const gameRoomSchema = new mongoose.Schema({
   },
   currentRound: {
     type: Number,
-    default: 0  },
-  totalRounds: {
+    default: 0  },  totalRounds: {
     type: Number,
-    default: 3
-  },  rounds: [roundSchema],  maxPlayers: {
+    default: 12  // 4 players × 3 cycles = 12 rounds
+  },rounds: [roundSchema],  maxPlayers: {
     type: Number,
-    default: 101,
+    default: 4,
     min: 4,
-    max: 101
+    max: 4
   },
   gameSettings: {
     predictionTime: {
@@ -148,11 +147,10 @@ const gameRoomSchema = new mongoose.Schema({
     playerName: String,
     score: Number,
     correctPredictions: Number
-  }],
-  createdAt: {
+  }],  createdAt: {
     type: Date,
-    default: Date.now,
-    expires: 7200 // Auto-delete after 2 hours
+    default: Date.now
+    // No expiration - game codes never expire
   },
   lastActivity: {
     type: Date,

@@ -1,11 +1,9 @@
 import GameRoom from '../models/GameRoom.js';
 import Question from '../models/Question.js';
-import GameSession from '../models/GameSession.js';
 
 // Create a new game room
-export const createGameRoom = async (req, res) => {
-  try {
-    const { playerName, maxPlayers = 101 } = req.body;
+export const createGameRoom = async (req, res) => {  try {
+    const { playerName } = req.body;
 
     if (!playerName || playerName.trim().length === 0) {
       return res.status(400).json({
@@ -16,13 +14,10 @@ export const createGameRoom = async (req, res) => {
 
     // Generate unique game code
     const gameCode = await GameRoom.generateGameCode();
-    const hostId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-
-    // Create new game room
+    const hostId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;    // Create new game room
     const gameRoom = new GameRoom({
       gameCode,
       hostId,
-      maxPlayers,
       players: [{
         id: hostId,
         name: playerName.trim(),
@@ -33,9 +28,7 @@ export const createGameRoom = async (req, res) => {
       }]
     });
 
-    await gameRoom.save();
-
-    res.status(201).json({
+    await gameRoom.save();    res.status(201).json({
       status: 'success',
       message: 'Game room created successfully',
       data: {
@@ -43,6 +36,7 @@ export const createGameRoom = async (req, res) => {
         hostId,
         roomId: gameRoom._id,
         player: gameRoom.players[0],
+        maxPlayers: 4,
         gameSettings: gameRoom.gameSettings
       }
     });
@@ -75,12 +69,10 @@ export const joinGameRoom = async (req, res) => {
         status: 'error',
         message: 'Game room not found or already started'
       });
-    }
-
-    if (gameRoom.players.length >= gameRoom.maxPlayers) {
+    }    if (gameRoom.players.length >= 4) {
       return res.status(400).json({
         status: 'error',
-        message: 'Game room is full'
+        message: 'Game room is full (maximum 4 players)'
       });
     }
 
@@ -105,18 +97,25 @@ export const joinGameRoom = async (req, res) => {
     };
 
     gameRoom.players.push(newPlayer);
-    await gameRoom.updateActivity();
-
-    res.status(200).json({
+    await gameRoom.updateActivity();    res.status(200).json({
       status: 'success',
-      message: 'Joined game room successfully',
+      message: 'Successfully joined game room',
       data: {
         gameCode,
         playerId,
         roomId: gameRoom._id,
         player: newPlayer,
-        players: gameRoom.players,
-        gameSettings: gameRoom.gameSettings
+        gameRoom: {
+          gameCode: gameRoom.gameCode,
+          hostId: gameRoom.hostId,
+          players: gameRoom.players,
+          status: gameRoom.status,
+          currentRound: gameRoom.currentRound,
+          totalRounds: 12,
+          gameSettings: gameRoom.gameSettings,
+          playersCount: gameRoom.players.length,
+          maxPlayers: 4
+        }
       }
     });
 
@@ -147,15 +146,13 @@ export const getGameRoom = async (req, res) => {
 
     res.status(200).json({
       status: 'success',
-      data: {
-        gameRoom: {
+      data: {        gameRoom: {
           gameCode: gameRoom.gameCode,
           hostId: gameRoom.hostId,
           players: gameRoom.players,
           status: gameRoom.status,
           currentRound: gameRoom.currentRound,
           totalRounds: gameRoom.totalRounds,
-          language: gameRoom.language,
           gameSettings: gameRoom.gameSettings,
           leaderboard: gameRoom.leaderboard,
           createdAt: gameRoom.createdAt,
@@ -208,21 +205,8 @@ export const startGame = async (req, res) => {
     }    // Start the game
     gameRoom.status = 'playing';
     gameRoom.currentRound = 1;
-    // Calculate total rounds: 3 cycles * number of players
-    gameRoom.totalRounds = gameRoom.players.length * 3;
-    await gameRoom.updateActivity();
-
-    // Create game session for tracking
-    const gameSession = new GameSession({
-      gameRoomId: gameRoom._id,
-      gameCode: gameRoom.gameCode,
-      totalPlayers: gameRoom.players.length,
-      totalRounds: gameRoom.totalRounds,
-      language: gameRoom.language
-    });
-    await gameSession.save();
-
-    res.status(200).json({
+    gameRoom.totalRounds = 12; // Fixed: 4 players × 3 cycles = 12 rounds
+    await gameRoom.updateActivity();    res.status(200).json({
       status: 'success',
       message: 'Game started successfully',
       data: {
@@ -230,9 +214,9 @@ export const startGame = async (req, res) => {
           gameCode: gameRoom.gameCode,
           status: gameRoom.status,
           currentRound: gameRoom.currentRound,
+          totalRounds: gameRoom.totalRounds,
           players: gameRoom.players
-        },
-        sessionId: gameSession._id
+        }
       }
     });
 
@@ -491,11 +475,18 @@ export const getLeaderboard = async (req, res) => {
   }
 };
 
-// Leave game room
+// Leave game room - improved version
 export const leaveGameRoom = async (req, res) => {
   try {
     const { gameCode } = req.params;
     const { playerId } = req.body;
+
+    if (!playerId) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Player ID is required'
+      });
+    }
 
     const gameRoom = await GameRoom.findOne({ gameCode });
 
@@ -506,16 +497,43 @@ export const leaveGameRoom = async (req, res) => {
       });
     }
 
+    // Check if player exists in room
+    const playerExists = gameRoom.players.find(p => p.id === playerId);
+    if (!playerExists) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Player not found in this room'
+      });
+    }
+
+    // Remove player
     await gameRoom.removePlayer(playerId);
 
-    // If no players left, delete the room
-    if (gameRoom.players.length === 0) {
+    // If no players left or game hasn't started, delete the room
+    if (gameRoom.players.length === 0 || (gameRoom.players.length < 4 && gameRoom.status === 'waiting')) {
       await GameRoom.findByIdAndDelete(gameRoom._id);
+      
+      return res.status(200).json({
+        status: 'success',
+        message: 'Left game room successfully',
+        data: {
+          gameCode,
+          playerId,
+          remainingPlayers: 0,
+          roomDeleted: true
+        }
+      });
     }
 
     res.status(200).json({
       status: 'success',
-      message: 'Left game room successfully'
+      message: 'Left game room successfully',
+      data: {
+        gameCode,
+        playerId,
+        remainingPlayers: gameRoom.players.length,
+        roomDeleted: false
+      }
     });
 
   } catch (error) {
@@ -523,6 +541,118 @@ export const leaveGameRoom = async (req, res) => {
     res.status(500).json({
       status: 'error',
       message: 'Failed to leave game room'
+    });
+  }
+};
+
+// Get current game state - useful for reconnections
+export const getGameState = async (req, res) => {
+  try {
+    const { gameCode } = req.params;
+    const { playerId } = req.query;
+
+    const gameRoom = await GameRoom.findOne({ gameCode })
+      .populate('rounds.questionId');
+
+    if (!gameRoom) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Game room not found'
+      });
+    }
+
+    // Check if player is in this room
+    const player = gameRoom.players.find(p => p.id === playerId);
+    if (!player) {
+      return res.status(403).json({
+        status: 'error',
+        message: 'Player not authorized for this room'
+      });
+    }
+
+    // Get current round info if game is playing
+    let currentRoundInfo = null;
+    if (gameRoom.status === 'playing' && gameRoom.rounds.length > 0) {
+      const currentRound = gameRoom.rounds.find(r => r.roundNumber === gameRoom.currentRound);
+      if (currentRound) {
+        currentRoundInfo = {
+          roundNumber: currentRound.roundNumber,
+          currentPlayer: gameRoom.players.find(p => p.id === currentRound.currentPlayerId),
+          question: currentRound.questionId,
+          hasAnswered: !!currentRound.playerAnswer,
+          predictionsCount: currentRound.predictions.length,
+          isCompleted: currentRound.isCompleted
+        };
+      }
+    }
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        gameRoom: {
+          gameCode: gameRoom.gameCode,
+          hostId: gameRoom.hostId,
+          players: gameRoom.players,
+          status: gameRoom.status,
+          currentRound: gameRoom.currentRound,
+          totalRounds: 12,
+          gameSettings: gameRoom.gameSettings,
+          leaderboard: gameRoom.leaderboard
+        },
+        playerInfo: {
+          id: player.id,
+          name: player.name,
+          score: player.score,
+          isHost: player.id === gameRoom.hostId
+        },
+        currentRoundInfo
+      }
+    });
+
+  } catch (error) {
+    console.error('Get game state error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to get game state'
+    });
+  }
+};
+
+// Validate game code - useful for frontend validation
+export const validateGameCode = async (req, res) => {
+  try {
+    const { gameCode } = req.params;
+
+    const gameRoom = await GameRoom.findOne({ gameCode });
+
+    if (!gameRoom) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Game room not found',
+        data: { isValid: false }
+      });
+    }
+
+    const canJoin = gameRoom.status === 'waiting' && gameRoom.players.length < 4;
+
+    res.status(200).json({
+      status: 'success',
+      data: {
+        isValid: true,
+        canJoin,
+        gameStatus: gameRoom.status,
+        playersCount: gameRoom.players.length,
+        maxPlayers: 4,
+        message: canJoin ? 'Game code is valid and you can join' : 
+                 gameRoom.status === 'playing' ? 'Game has already started' : 'Game room is full'
+      }
+    });
+
+  } catch (error) {
+    console.error('Validate game code error:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Failed to validate game code'
     });
   }
 };

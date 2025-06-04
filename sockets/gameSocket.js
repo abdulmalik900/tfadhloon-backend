@@ -45,9 +45,7 @@ export const setupGameSocket = (io) => {
         socket.to(gameCode).emit('player-joined', {
           player: player,
           totalPlayers: gameRoom.players.length
-        });
-
-        // Send room data to joining player
+        });        // Send room data to joining player
         socket.emit('room-joined', {
           gameRoom: {
             gameCode: gameRoom.gameCode,
@@ -56,11 +54,41 @@ export const setupGameSocket = (io) => {
             status: gameRoom.status,
             currentRound: gameRoom.currentRound,
             totalRounds: gameRoom.totalRounds,
-            language: gameRoom.language,
             gameSettings: gameRoom.gameSettings,
             leaderboard: gameRoom.leaderboard
           }
         });
+
+        // Check if room is full (4 players) and automatically start the game
+        if (gameRoom.players.length === 4 && gameRoom.status === 'waiting') {
+          setTimeout(async () => {
+            try {
+              const updatedRoom = await GameRoom.findOne({ gameCode });
+              if (updatedRoom && updatedRoom.players.length === 4 && updatedRoom.status === 'waiting') {
+                // Start the game automatically
+                updatedRoom.status = 'playing';
+                updatedRoom.currentRound = 1;
+                updatedRoom.totalRounds = 12; // 4 players × 3 cycles
+                await updatedRoom.save();
+
+                // Notify all players
+                io.to(gameCode).emit('game-auto-started', {
+                  message: '4 players joined! Game starting automatically...',
+                  status: 'playing',
+                  currentRound: 1,
+                  totalRounds: 12
+                });
+
+                // Start first round after 3 seconds
+                setTimeout(() => {
+                  startNewRound(io, gameCode);
+                }, 3000);
+              }
+            } catch (error) {
+              console.error('Auto-start game error:', error);
+            }
+          }, 1000);
+        }
 
       } catch (error) {
         console.error('Join room error:', error);
@@ -105,20 +133,22 @@ export const setupGameSocket = (io) => {
           socket.emit('error', { message: 'Only host can start the game' });
           return;
         }        if (gameRoom.players.length < 4) {
-          socket.emit('error', { message: 'Minimum 4 players required (including host)' });
+          socket.emit('error', { message: 'Need exactly 4 players to start the game' });
+          return;
+        }
+
+        if (gameRoom.players.length > 4) {
+          socket.emit('error', { message: 'Too many players in room' });
           return;
         }        // Start the game
         gameRoom.status = 'playing';
         gameRoom.currentRound = 1;
-        // Calculate total rounds: 3 cycles * number of players
-        gameRoom.totalRounds = gameRoom.players.length * 3;
-        await gameRoom.save();
-
-        // Notify all players
+        gameRoom.totalRounds = 12; // 4 players × 3 cycles
+        await gameRoom.save();        // Notify all players
         io.to(gameCode).emit('game-started', {
           status: 'playing',
           currentRound: 1,
-          totalRounds: gameRoom.totalRounds
+          totalRounds: 12
         });
 
         // Start first round
@@ -164,10 +194,8 @@ export const setupGameSocket = (io) => {
           playerId,
           submittedCount: predictions.length,
           totalSubmitted: getCurrentRoundSubmissions(gameRoom)
-        });
-
-        // Check if all predictions are in
-        const expectedPredictions = gameRoom.players.length - 1; // Everyone except current player
+        });        // Check if all predictions are in
+        const expectedPredictions = gameRoom.players.length - 1; // Everyone except current player (3 predictions needed)
         const currentSubmissions = getCurrentRoundSubmissions(gameRoom);
         
         if (currentSubmissions >= expectedPredictions) {
@@ -219,11 +247,9 @@ export const setupGameSocket = (io) => {
           predictions: currentRound.predictions,
           leaderboard: gameRoom.leaderboard,
           roundNumber: currentRound.roundNumber
-        });
-
-        // Start next round or end game
+        });        // Start next round or end game
         setTimeout(() => {
-          if (gameRoom.currentRound >= gameRoom.totalRounds * gameRoom.players.length) {
+          if (gameRoom.currentRound > 12) { // 12 rounds total (4 players × 3 cycles)
             endGame(io, gameCode);
           } else {
             startNewRound(io, gameCode);
@@ -233,9 +259,7 @@ export const setupGameSocket = (io) => {
       } catch (error) {
         console.error('Submit answer error:', error);
       }
-    });
-
-    // Handle disconnection
+    });    // Handle disconnection
     socket.on('disconnect', async () => {
       console.log(`🔌 Socket disconnected: ${socket.id}`);
 
@@ -256,8 +280,11 @@ export const setupGameSocket = (io) => {
               socket.to(gameCode).emit('player-disconnected', {
                 playerId,
                 playerName,
-                remainingPlayers: gameRoom.players.filter(p => p.isConnected).length
+                remainingPlayers: gameRoom.players.filter(p => p.isConnected).length,
+                disconnectedAt: new Date().toISOString()
               });
+
+              console.log(`🚪 Player ${playerName} (${playerId}) disconnected from room ${gameCode}`);
             }
           }
 
@@ -267,6 +294,7 @@ export const setupGameSocket = (io) => {
             roomSockets.get(gameCode).delete(socket.id);
             if (roomSockets.get(gameCode).size === 0) {
               roomSockets.delete(gameCode);
+              console.log(`🗑️ Cleaned up empty room: ${gameCode}`);
             }
           }
 
@@ -278,7 +306,72 @@ export const setupGameSocket = (io) => {
 
     // Ping/Pong for connection health
     socket.on('ping', () => {
-      socket.emit('pong');
+      socket.emit('pong', { timestamp: new Date().toISOString() });
+    });
+
+    // Handle reconnection
+    socket.on('reconnect-player', async (data) => {
+      try {
+        const { gameCode, playerId, playerName } = data;
+
+        console.log(`🔄 Player ${playerName} (${playerId}) attempting reconnection to room ${gameCode}`);
+
+        const gameRoom = await GameRoom.findOne({ gameCode });
+        
+        if (!gameRoom) {
+          socket.emit('error', { message: 'Game room not found', code: 'ROOM_NOT_FOUND' });
+          return;
+        }
+
+        const player = gameRoom.players.find(p => p.id === playerId);
+        if (!player) {
+          socket.emit('error', { message: 'Player not found in this room', code: 'PLAYER_NOT_FOUND' });
+          return;
+        }
+
+        // Update connection status
+        player.isConnected = true;
+        await gameRoom.save();
+
+        // Join socket room
+        socket.join(gameCode);
+        
+        // Store connection info
+        activeConnections.set(socket.id, { gameCode, playerId, playerName });
+        
+        if (!roomSockets.has(gameCode)) {
+          roomSockets.set(gameCode, new Set());
+        }
+        roomSockets.get(gameCode).add(socket.id);
+
+        // Send current game state
+        socket.emit('reconnected', {
+          gameRoom: {
+            gameCode: gameRoom.gameCode,
+            hostId: gameRoom.hostId,
+            players: gameRoom.players,
+            status: gameRoom.status,
+            currentRound: gameRoom.currentRound,
+            totalRounds: gameRoom.totalRounds,
+            gameSettings: gameRoom.gameSettings,
+            leaderboard: gameRoom.leaderboard
+          },
+          message: 'Successfully reconnected to game'
+        });
+
+        // Notify other players
+        socket.to(gameCode).emit('player-reconnected', {
+          playerId,
+          playerName,
+          reconnectedAt: new Date().toISOString()
+        });
+
+        console.log(`✅ Player ${playerName} successfully reconnected to room ${gameCode}`);
+
+      } catch (error) {
+        console.error('Reconnection error:', error);
+        socket.emit('error', { message: 'Failed to reconnect', code: 'RECONNECTION_FAILED' });
+      }
     });
   });
 };

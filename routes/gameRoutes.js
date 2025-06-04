@@ -8,7 +8,9 @@ import {
   submitPredictions,
   submitAnswer,
   getLeaderboard,
-  leaveGameRoom
+  leaveGameRoom,
+  getGameState,
+  validateGameCode
 } from '../controller/gameController.js';
 
 const router = Router();
@@ -25,7 +27,9 @@ router.get('/test', (req, res) => {
 // Game room management
 router.post('/create', createGameRoom);
 router.post('/join', joinGameRoom);
+router.get('/validate/:gameCode', validateGameCode);
 router.get('/:gameCode', getGameRoom);
+router.get('/:gameCode/state', getGameState);
 router.post('/:gameCode/start', startGame);
 router.post('/:gameCode/leave', leaveGameRoom);
 
