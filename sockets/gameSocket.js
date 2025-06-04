@@ -105,13 +105,13 @@ export const setupGameSocket = (io) => {
           socket.emit('error', { message: 'Only host can start the game' });
           return;
         }        if (gameRoom.players.length < 4) {
-          socket.emit('error', { message: 'Exactly 4 players required (1 host + 3 players)' });
+          socket.emit('error', { message: 'Minimum 4 players required (including host)' });
           return;
-        }
-
-        // Start the game
+        }        // Start the game
         gameRoom.status = 'playing';
         gameRoom.currentRound = 1;
+        // Calculate total rounds: 3 cycles * number of players
+        gameRoom.totalRounds = gameRoom.players.length * 3;
         await gameRoom.save();
 
         // Notify all players

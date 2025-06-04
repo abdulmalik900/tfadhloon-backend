@@ -1,11 +1,10 @@
 # 🎮 TFADHLOON Game API - Frontend Developer Guide
 
 ## 🚀 Quick Start
-
-**Base URL:** `http://localhost:3005`  
+ 
 **API Endpoints:** `http://localhost:3005/api/games`  
 **Content-Type:** `application/json` for all requests  
-**Game Design:** Supports exactly 4 players - Host (Player A) + 3 other players (B, C, D)
+**Game Design:** Supports 4-101 players (minimum 4 including host, maximum 101 players)
 
 ---
 
@@ -58,7 +57,7 @@ POST http://localhost:3005/api/games/create
 ```json
 {
   "playerName": "John Doe",
-  "maxPlayers": 4
+  "maxPlayers": 101
 }
 ```
 
@@ -348,7 +347,7 @@ POST http://localhost:3005/api/games/1234/start
 // Not enough players (400)
 {
   "status": "error",
-  "message": "Exactly 4 players required to start the game (1 host + 3 players)"
+  "message": "Minimum 4 players required to start the game (including host)"
 }
 
 // Game already started (400)

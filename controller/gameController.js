@@ -5,7 +5,7 @@ import GameSession from '../models/GameSession.js';
 // Create a new game room
 export const createGameRoom = async (req, res) => {
   try {
-    const { playerName, maxPlayers = 4 } = req.body;
+    const { playerName, maxPlayers = 101 } = req.body;
 
     if (!playerName || playerName.trim().length === 0) {
       return res.status(400).json({
@@ -196,7 +196,7 @@ export const startGame = async (req, res) => {
     }    if (gameRoom.players.length < 4) {
       return res.status(400).json({
         status: 'error',
-        message: 'Exactly 4 players required to start the game (1 host + 3 players)'
+        message: 'Minimum 4 players required to start the game (including host)'
       });
     }
 
@@ -205,11 +205,11 @@ export const startGame = async (req, res) => {
         status: 'error',
         message: 'Game has already started'
       });
-    }
-
-    // Start the game
+    }    // Start the game
     gameRoom.status = 'playing';
     gameRoom.currentRound = 1;
+    // Calculate total rounds: 3 cycles * number of players
+    gameRoom.totalRounds = gameRoom.players.length * 3;
     await gameRoom.updateActivity();
 
     // Create game session for tracking
