@@ -119,11 +119,11 @@ const gameRoomSchema = new mongoose.Schema({
   totalRounds: {
     type: Number,
     default: 3
-  },
-  rounds: [roundSchema],  maxPlayers: {
+  },  rounds: [roundSchema],
+  maxPlayers: {
     type: Number,
     default: 4,
-    min: 2,
+    min: 4,
     max: 4
   },
   gameSettings: {

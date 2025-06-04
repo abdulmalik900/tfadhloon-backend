@@ -193,12 +193,10 @@ export const startGame = async (req, res) => {
         status: 'error',
         message: 'Only the host can start the game'
       });
-    }
-
-    if (gameRoom.players.length < 2) {
+    }    if (gameRoom.players.length < 4) {
       return res.status(400).json({
         status: 'error',
-        message: 'At least 2 players required to start the game'
+        message: 'Exactly 4 players required to start the game (1 host + 3 players)'
       });
     }
 

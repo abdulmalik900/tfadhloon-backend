@@ -104,10 +104,8 @@ export const setupGameSocket = (io) => {
         if (!gameRoom || gameRoom.hostId !== hostId) {
           socket.emit('error', { message: 'Only host can start the game' });
           return;
-        }
-
-        if (gameRoom.players.length < 2) {
-          socket.emit('error', { message: 'At least 2 players required' });
+        }        if (gameRoom.players.length < 4) {
+          socket.emit('error', { message: 'Exactly 4 players required (1 host + 3 players)' });
           return;
         }
 
