@@ -24,6 +24,21 @@ router.get('/test', (req, res) => {
   });
 });
 
+// Socket.io connection test
+router.get('/test-socket', (req, res) => {
+  res.json({
+    message: 'Socket.io connection test endpoint',
+    instructions: {
+      step1: 'Connect to: ws://localhost:3005 or wss://backend.tfadhloon.com',
+      step2: 'Emit: test-connection with any data',
+      step3: 'Listen for: connection-test-response',
+      step4: 'Check browser console for connection details'
+    },
+    timestamp: new Date().toISOString(),
+    server: 'TFADHLOON Socket.io Server'
+  });
+});
+
 // Game room management
 router.post('/create', createGameRoom);
 router.post('/join', joinGameRoom);

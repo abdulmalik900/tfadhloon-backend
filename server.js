@@ -21,20 +21,27 @@ const server = createServer(app);
 const io = new Server(server, {
   cors: {
     origin: process.env.NODE_ENV === 'production' 
-      ? [process.env.BASE_URL] 
-      : '*',
-    methods: ["GET", "POST"]
-  }
+      ? [process.env.BASE_URL, "https://backend.tfadhloon.com", "https://tfadhloon.com"] 
+      : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', '*'],
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"]
+  },
+  transports: ['websocket', 'polling'],
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000
 });
 
 // Middleware
 app.use(
   cors({
     origin: process.env.NODE_ENV === 'production' 
-      ? [process.env.BASE_URL]
-      : '*',
+      ? [process.env.BASE_URL, "https://backend.tfadhloon.com", "https://tfadhloon.com"]
+      : ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', '*'],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
-   
+    credentials: true,
+    allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 
@@ -83,14 +90,44 @@ setupGameSocket(io);
 // Error handling middleware
 app.use(errorResponseHandler);
 
-// Start server - only if not in Vercel serverless environment
-if (process.env.NODE_ENV !== 'production') {
-  const PORT = process.env.PORT || 3005;
+// Socket.io connection status endpoint
+app.get('/api/socket-status', (req, res) => {
+  res.status(200).json({
+    status: 'success',
+    message: 'Socket.io server is running',
+    data: {
+      socketConnected: io.engine.clientsCount || 0,
+      transport: 'websocket,polling',
+      cors: process.env.NODE_ENV === 'production' 
+        ? 'production-cors-enabled'
+        : 'development-cors-enabled',
+      timestamp: new Date().toISOString()
+    }
+  });
+});
+
+// Start server - Fixed for production
+const PORT = process.env.PORT || 3005;
+
+if (process.env.NODE_ENV === 'production') {
+  // In production, always start the server
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log('\n' + '='.repeat(50));
+    console.log(`✅ Production Server Running!`);
+    console.log(`🌐 Server Address: https://backend.tfadhloon.com`);
+    console.log(`🔌 Socket.io ready for connections`);
+    console.log(`⏰ Started at: ${new Date().toISOString()}`);
+    console.log('='.repeat(50) + '\n');
+  });
+} else {
+  // Development mode
   server.listen(PORT, () => {
     console.log('\n' + '='.repeat(50));
-    console.log(`✅ Server is running successfully!`);
+    console.log(`✅ Development Server Running!`);
     console.log(`🌐 Server Address: http://localhost:${PORT}`);
-    console.log(`🔌 Socket.io ready for real-time connections`);
+    console.log(`🔌 Socket.io ready for connections`);
+    console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`⏰ Started at: ${new Date().toISOString()}`);
     console.log('='.repeat(50) + '\n');
   });
 }

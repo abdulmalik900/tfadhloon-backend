@@ -6,8 +6,48 @@ const activeConnections = new Map();
 const roomSockets = new Map(); // roomId -> Set of socketIds
 
 export const setupGameSocket = (io) => {
+  // Add connection monitoring
+  console.log('🔌 Setting up Socket.io game server...');
+  
+  // Track connection stats
+  let connectionCount = 0;
+  
   io.on('connection', (socket) => {
-    console.log(`🔌 New socket connection: ${socket.id}`);
+    connectionCount++;
+    console.log(`🔌 New socket connection: ${socket.id} (Total: ${connectionCount})`);
+    console.log(`🌐 Transport: ${socket.conn.transport.name}`);
+    console.log(`📡 Client IP: ${socket.handshake.address}`);
+    console.log(`🔗 Headers: ${JSON.stringify(socket.handshake.headers.origin || 'no-origin')}`);
+
+    // Enhanced connection health check
+    socket.emit('connection-confirmed', {
+      socketId: socket.id,
+      timestamp: new Date().toISOString(),
+      message: 'Socket.io connection established successfully',
+      server: 'TFADHLOON Game Server'
+    });
+
+    // Immediate health check response
+    socket.on('ping', (data) => {
+      console.log(`💓 Health check from ${socket.id}`);
+      socket.emit('pong', { 
+        timestamp: new Date().toISOString(),
+        serverStatus: 'healthy',
+        receivedData: data
+      });
+    });
+
+    // Connection test endpoint
+    socket.on('test-connection', (data) => {
+      console.log(`🧪 Connection test from ${socket.id}:`, data);
+      socket.emit('connection-test-response', {
+        success: true,
+        timestamp: new Date().toISOString(),
+        receivedData: data,
+        socketId: socket.id,
+        message: 'Socket.io is working perfectly!'
+      });
+    });
 
     // Join game room
     socket.on('join-room', async (data) => {
@@ -259,9 +299,11 @@ export const setupGameSocket = (io) => {
       } catch (error) {
         console.error('Submit answer error:', error);
       }
-    });    // Handle disconnection
-    socket.on('disconnect', async () => {
-      console.log(`🔌 Socket disconnected: ${socket.id}`);
+    });    // Handle disconnection with better logging
+    socket.on('disconnect', async (reason) => {
+      connectionCount--;
+      console.log(`🔌 Socket disconnected: ${socket.id} (Remaining: ${connectionCount})`);
+      console.log(`📤 Disconnect reason: ${reason}`);
 
       const connectionInfo = activeConnections.get(socket.id);
       if (connectionInfo) {
@@ -281,10 +323,11 @@ export const setupGameSocket = (io) => {
                 playerId,
                 playerName,
                 remainingPlayers: gameRoom.players.filter(p => p.isConnected).length,
-                disconnectedAt: new Date().toISOString()
+                disconnectedAt: new Date().toISOString(),
+                reason: reason
               });
 
-              console.log(`🚪 Player ${playerName} (${playerId}) disconnected from room ${gameCode}`);
+              console.log(`🚪 Player ${playerName} (${playerId}) disconnected from room ${gameCode} - Reason: ${reason}`);
             }
           }
 
@@ -304,9 +347,29 @@ export const setupGameSocket = (io) => {
       }
     });
 
-    // Ping/Pong for connection health
-    socket.on('ping', () => {
-      socket.emit('pong', { timestamp: new Date().toISOString() });
+    // Enhanced error handling
+    socket.on('error', (error) => {
+      console.error(`❌ Socket error from ${socket.id}:`, error);
+      socket.emit('socket-error-response', {
+        error: 'Socket error occurred',
+        timestamp: new Date().toISOString(),
+        socketId: socket.id
+      });
+    });
+
+    // Socket connection quality monitoring
+    socket.on('connection-quality-check', () => {
+      const latencyStart = Date.now();
+      socket.emit('quality-ping', { sentAt: latencyStart });
+    });
+
+    socket.on('quality-pong', (data) => {
+      const latency = Date.now() - data.sentAt;
+      socket.emit('connection-quality-result', {
+        latency: latency,
+        quality: latency < 100 ? 'excellent' : latency < 300 ? 'good' : 'poor',
+        timestamp: new Date().toISOString()
+      });
     });
 
     // Handle reconnection
