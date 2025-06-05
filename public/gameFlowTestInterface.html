@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TFADHLOON Game Flow Test Interface</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .test-section {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 15px;
+            padding: 25px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .test-section h2 {
+            color: #ffd700;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+
+        .players-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .player-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .player-card.current-player {
+            border-color: #ffd700;
+            box-shadow: 0 0 20px rgba(255, 215, 0, 0.5);
+        }
+
+        .player-card.connected {
+            border-color: #00ff88;
+        }
+
+        .player-card.disconnected {
+            border-color: #ff4444;
+            opacity: 0.6;
+        }
+
+        .player-name {
+            font-weight: bold;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+        }
+
+        .player-status {
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .player-score {
+            font-size: 1.5em;
+            color: #ffd700;
+            font-weight: bold;
+        }
+
+        .control-panel {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .control-panel input {
+            padding: 10px 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #00ff88, #00d4aa);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 255, 136, 0.4);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+        }
+
+        .btn-warning {
+            background: linear-gradient(45deg, #ffd700, #ffb700);
+            color: #333;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .game-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .info-card {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .info-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+
+        .info-label {
+            font-size: 0.9em;
+            opacity: 0.8;
+            margin-top: 5px;
+        }
+
+        .question-display {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .question-text {
+            font-size: 1.3em;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+
+        .options {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .option-btn {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            border-radius: 10px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            min-width: 120px;
+        }
+
+        .option-btn:hover {
+            border-color: #ffd700;
+            background: rgba(255, 215, 0, 0.2);
+        }
+
+        .option-btn.selected {
+            background: #ffd700;
+            color: #333;
+            font-weight: bold;
+        }
+
+        .timer {
+            text-align: center;
+            font-size: 3em;
+            font-weight: bold;
+            color: #ffd700;
+            margin: 20px 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+        }
+
+        .timer.warning {
+            color: #ff6b6b;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .log {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+
+        .log-success {
+            color: #00ff88;
+        }
+
+        .log-error {
+            color: #ff6b6b;
+        }
+
+        .log-info {
+            color: #87ceeb;
+        }
+
+        .log-warning {
+            color: #ffd700;
+        }
+
+        .phase-indicator {
+            text-align: center;
+            font-size: 1.5em;
+            font-weight: bold;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .phase-waiting {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+        }
+
+        .phase-playing {
+            background: linear-gradient(45deg, #00ff88, #00d4aa);
+        }
+
+        .phase-predicting {
+            background: linear-gradient(45deg, #ffd700, #ffb700);
+            color: #333;
+        }
+
+        .phase-answering {
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+        }
+
+        .phase-scoring {
+            background: linear-gradient(45deg, #9c88ff, #8c7ae6);
+        }
+
+        .winner-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 215, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            animation: winnerPulse 2s infinite;
+        }
+
+        @keyframes winnerPulse {
+            0% { background: rgba(255, 215, 0, 0.8); }
+            50% { background: rgba(255, 215, 0, 0.95); }
+            100% { background: rgba(255, 215, 0, 0.8); }
+        }
+
+        .winner-text {
+            font-size: 4em;
+            font-weight: bold;
+            color: #333;
+            text-shadow: 3px 3px 6px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+
+        .confetti {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background: #ff6b6b;
+            animation: confetti-fall 3s linear infinite;
+        }
+
+        @keyframes confetti-fall {
+            0% {
+                transform: translateY(-100vh) rotate(0deg);
+                opacity: 1;
+            }
+            100% {
+                transform: translateY(100vh) rotate(720deg);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 TFADHLOON Game Flow Test</h1>
+            <p>Frontend Developer Testing Interface</p>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="test-section">
+            <h2>🎮 Game Control Panel</h2>
+            <div class="control-panel">
+                <input type="text" id="serverUrl" placeholder="Server URL" value="http://localhost:3005">
+                <input type="text" id="gameCode" placeholder="Game Code (4 digits)">
+                <button class="btn btn-primary" onclick="createGame()">Create Game</button>
+                <button class="btn btn-secondary" onclick="joinGame()">Join Game</button>
+                <button class="btn btn-warning" onclick="startGame()" id="startGameBtn" disabled>Start Game</button>
+            </div>
+        </div>
+
+        <!-- Game Information -->
+        <div class="test-section">
+            <h2>📊 Game Information</h2>
+            <div class="game-info">
+                <div class="info-card">
+                    <div class="info-value" id="gameCodeDisplay">----</div>
+                    <div class="info-label">Game Code</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-value" id="currentRound">0</div>
+                    <div class="info-label">Current Round</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-value" id="totalRounds">12</div>
+                    <div class="info-label">Total Rounds</div>
+                </div>
+                <div class="info-card">
+                    <div class="info-value" id="playerCount">0</div>
+                    <div class="info-label">Players</div>
+                </div>
+            </div>
+            
+            <div class="phase-indicator" id="gamePhase">
+                Waiting for Game
+            </div>
+        </div>
+
+        <!-- Current Question -->
+        <div class="test-section" id="questionSection" style="display: none;">
+            <h2>❓ Current Question</h2>
+            <div class="timer" id="timer">--</div>
+            <div class="question-display">
+                <div class="question-text" id="questionText">Waiting for question...</div>
+                <div class="options">
+                    <button class="option-btn" id="optionA" onclick="selectOption('A')">Option A</button>
+                    <button class="option-btn" id="optionB" onclick="selectOption('B')">Option B</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Players -->
+        <div class="test-section">
+            <h2>👥 Players</h2>
+            <div class="players-grid" id="playersGrid">
+                <!-- Players will be populated here -->
+            </div>
+        </div>
+
+        <!-- Event Log -->
+        <div class="test-section">
+            <h2>📝 Event Log</h2>
+            <div class="log" id="eventLog">
+                <div class="log-entry log-info">🚀 Frontend test interface ready</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Winner Animation (hidden by default) -->
+    <div class="winner-animation" id="winnerAnimation" style="display: none;">
+        <div class="winner-text" id="winnerText">🏆 WINNER! 🏆</div>
+        <div id="winnerName" style="font-size: 2em; color: #333;"></div>
+    </div>
+
+    <script>
+        // Global variables
+        let socket = null;
+        let gameData = {
+            gameCode: null,
+            playerId: null,
+            playerName: 'Test Player',
+            isHost: false,
+            currentQuestion: null,
+            selectedOption: null
+        };
+
+        // Create confetti effect
+        function createConfetti() {
+            const colors = ['#ff6b6b', '#ffd700', '#00ff88', '#87ceeb', '#9c88ff'];
+            for (let i = 0; i < 50; i++) {
+                setTimeout(() => {
+                    const confetti = document.createElement('div');
+                    confetti.className = 'confetti';
+                    confetti.style.left = Math.random() * 100 + '%';
+                    confetti.style.background = colors[Math.floor(Math.random() * colors.length)];
+                    confetti.style.animationDelay = Math.random() * 3 + 's';
+                    document.body.appendChild(confetti);
+                    
+                    setTimeout(() => {
+                        confetti.remove();
+                    }, 3000);
+                }, i * 100);
+            }
+        }
+
+        // Log function
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('eventLog');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.innerHTML = `${new Date().toLocaleTimeString()} - ${message}`;
+            logElement.appendChild(entry);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        // Update phase indicator
+        function updatePhase(phase) {
+            const phaseElement = document.getElementById('gamePhase');
+            phaseElement.className = 'phase-indicator phase-' + phase;
+            
+            const phaseTexts = {
+                'waiting': '⏳ Waiting for Players',
+                'playing': '🎮 Game in Progress',
+                'predicting': '🔮 Making Predictions',
+                'answering': '✋ Current Player Answering',
+                'scoring': '📈 Calculating Scores',
+                'final_scores': '🏆 Final Results',
+                'winner_animation': '🎉 Winner Celebration',
+                'finished': '✅ Game Complete'
+            };
+            
+            phaseElement.textContent = phaseTexts[phase] || phase;
+        }
+
+        // Create game
+        async function createGame() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            
+            try {
+                const response = await fetch(`${serverUrl}/api/games/create`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        playerName: gameData.playerName
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    gameData.gameCode = data.data.gameCode;
+                    gameData.playerId = data.data.hostId;
+                    gameData.isHost = true;
+                    
+                    document.getElementById('gameCode').value = gameData.gameCode;
+                    document.getElementById('gameCodeDisplay').textContent = gameData.gameCode;
+                    
+                    log(`✅ Game created with code: ${gameData.gameCode}`, 'success');
+                    
+                    // Connect socket
+                    connectSocket(serverUrl);
+                } else {
+                    log(`❌ Failed to create game: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Error creating game: ${error.message}`, 'error');
+            }
+        }
+
+        // Join game
+        async function joinGame() {
+            const serverUrl = document.getElementById('serverUrl').value;
+            const gameCode = document.getElementById('gameCode').value;
+            
+            if (!gameCode || gameCode.length !== 4) {
+                log('❌ Please enter a valid 4-digit game code', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${serverUrl}/api/games/join`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        gameCode: gameCode,
+                        playerName: gameData.playerName + '_' + Math.floor(Math.random() * 1000)
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    gameData.gameCode = gameCode;
+                    gameData.playerId = data.data.playerId;
+                    gameData.isHost = false;
+                    
+                    document.getElementById('gameCodeDisplay').textContent = gameCode;
+                    
+                    log(`✅ Joined game: ${gameCode}`, 'success');
+                    
+                    // Connect socket
+                    connectSocket(serverUrl);
+                } else {
+                    log(`❌ Failed to join game: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Error joining game: ${error.message}`, 'error');
+            }
+        }
+
+        // Connect socket
+        function connectSocket(serverUrl) {
+            const socketUrl = serverUrl.replace('http', 'ws');
+            
+            socket = io(socketUrl, {
+                transports: ['websocket', 'polling']
+            });
+
+            socket.on('connect', () => {
+                log(`🔌 Connected to server (Socket ID: ${socket.id})`, 'success');
+                
+                // Join room
+                socket.emit('join-room', {
+                    gameCode: gameData.gameCode,
+                    playerId: gameData.playerId,
+                    playerName: gameData.playerName
+                });
+            });
+
+            socket.on('room-joined', (data) => {
+                log('✅ Successfully joined room', 'success');
+                updateGameData(data.gameRoom);
+                
+                if (gameData.isHost) {
+                    document.getElementById('startGameBtn').disabled = false;
+                }
+            });
+
+            socket.on('player-joined', (data) => {
+                log(`👤 Player joined: ${data.player.name}`, 'info');
+                document.getElementById('playerCount').textContent = data.totalPlayers;
+                updatePlayersList();
+            });
+
+            socket.on('game-started', (data) => {
+                log(`🚀 Game started! Round ${data.currentRound}/${data.totalRounds}`, 'success');
+                updatePhase('playing');
+                document.getElementById('currentRound').textContent = data.currentRound;
+                document.getElementById('startGameBtn').disabled = true;
+            });
+
+            socket.on('round-started', (data) => {
+                log(`🎯 Round ${data.roundNumber} started. Current player: ${data.currentPlayer.name}`, 'info');
+                updatePhase(data.gamePhase);
+                document.getElementById('currentRound').textContent = data.roundNumber;
+                
+                // Show question
+                showQuestion(data);
+                
+                // Start timer
+                startTimer(data.timeLimit);
+            });
+
+            socket.on('prediction-timer', (data) => {
+                updateTimer(data.timeRemaining);
+            });
+
+            socket.on('prediction-phase-ended', (data) => {
+                log('🔓 Current player can now answer', 'warning');
+                updatePhase(data.gamePhase);
+                startTimer(data.timeLimit);
+            });
+
+            socket.on('answer-timer', (data) => {
+                updateTimer(data.timeRemaining);
+            });
+
+            socket.on('round-completed', (data) => {
+                log(`📈 Round ${data.roundNumber} completed!`, 'success');
+                updatePhase(data.gamePhase);
+                
+                // Show results
+                log(`Current player answered: ${data.currentPlayerAnswer}`, 'info');
+                data.predictions.forEach(pred => {
+                    const result = pred.isCorrect ? '✅' : '❌';
+                    log(`${pred.playerName}: ${pred.predictedChoice} ${result} (+${pred.pointsEarned} points)`, 'info');
+                });
+                
+                hideQuestion();
+            });
+
+            socket.on('next-round-starting', (data) => {
+                log(`➡️ Next round starting. Round ${data.nextRound}/${data.totalRounds}`, 'info');
+                log(`👤 Next player: ${data.nextPlayer.name}`, 'info');
+                updateScores(data.currentScores);
+            });
+
+            socket.on('game-finished', (data) => {
+                log('🎊 Game finished! Final results:', 'success');
+                updatePhase(data.gamePhase);
+                
+                data.finalScores.forEach((player, index) => {
+                    const rank = index + 1;
+                    const trophy = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '🏅';
+                    log(`${trophy} ${rank}. ${player.playerName}: ${player.score} points`, 'info');
+                });
+                
+                log(`🏆 Winner: ${data.winner.playerName} with ${data.winner.score} points!`, 'success');
+            });
+
+            socket.on('winner-animation', (data) => {
+                log(`🎉 Winner animation for ${data.winner.playerName}`, 'success');
+                updatePhase('winner_animation');
+                showWinnerAnimation(data.winner);
+                createConfetti();
+            });
+
+            socket.on('game-ended', (data) => {
+                log('✅ Game completed! Thank you for playing!', 'success');
+                updatePhase('finished');
+                hideWinnerAnimation();
+            });
+
+            socket.on('error', (error) => {
+                log(`❌ Socket error: ${error.message}`, 'error');
+            });
+
+            socket.on('disconnect', () => {
+                log('🔌 Disconnected from server', 'warning');
+            });
+        }
+
+        // Update game data
+        function updateGameData(gameRoom) {
+            document.getElementById('currentRound').textContent = gameRoom.currentRound;
+            document.getElementById('totalRounds').textContent = gameRoom.totalRounds;
+            document.getElementById('playerCount').textContent = gameRoom.players.length;
+            updatePhase(gameRoom.gamePhase || gameRoom.status);
+            updatePlayersList(gameRoom.players);
+        }
+
+        // Update players list
+        function updatePlayersList(players = []) {
+            const playersGrid = document.getElementById('playersGrid');
+            playersGrid.innerHTML = '';
+            
+            players.forEach(player => {
+                const playerCard = document.createElement('div');
+                playerCard.className = 'player-card';
+                
+                if (player.isConnected) {
+                    playerCard.classList.add('connected');
+                } else {
+                    playerCard.classList.add('disconnected');
+                }
+                
+                playerCard.innerHTML = `
+                    <div class="player-name">${player.name}</div>
+                    <div class="player-status">
+                        ${player.isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+                        ${player.id === gameData.playerId ? ' (You)' : ''}
+                    </div>
+                    <div class="player-score">${player.score} points</div>
+                `;
+                
+                playersGrid.appendChild(playerCard);
+            });
+        }
+
+        // Update scores
+        function updateScores(scores) {
+            scores.forEach(scoreData => {
+                log(`📊 ${scoreData.playerName}: ${scoreData.score} points`, 'info');
+            });
+        }
+
+        // Show question
+        function showQuestion(data) {
+            gameData.currentQuestion = data.question;
+            gameData.selectedOption = null;
+            
+            document.getElementById('questionSection').style.display = 'block';
+            document.getElementById('questionText').textContent = data.question.questionText;
+            document.getElementById('optionA').textContent = `A: ${data.question.optionA}`;
+            document.getElementById('optionB').textContent = `B: ${data.question.optionB}`;
+            
+            // Reset option buttons
+            document.getElementById('optionA').classList.remove('selected');
+            document.getElementById('optionB').classList.remove('selected');
+            
+            // Enable/disable options based on current player
+            const isCurrentPlayer = data.currentPlayer.id === gameData.playerId;
+            const canPredict = !isCurrentPlayer && data.gamePhase === 'predicting';
+            const canAnswer = isCurrentPlayer && data.gamePhase === 'answering';
+            
+            document.getElementById('optionA').disabled = !(canPredict || canAnswer);
+            document.getElementById('optionB').disabled = !(canPredict || canAnswer);
+        }
+
+        // Hide question
+        function hideQuestion() {
+            document.getElementById('questionSection').style.display = 'none';
+        }
+
+        // Select option
+        function selectOption(option) {
+            if (gameData.selectedOption === option) return;
+            
+            gameData.selectedOption = option;
+            
+            // Update UI
+            document.getElementById('optionA').classList.remove('selected');
+            document.getElementById('optionB').classList.remove('selected');
+            document.getElementById('option' + option).classList.add('selected');
+            
+            // Submit based on game phase
+            if (socket) {
+                if (document.getElementById('gamePhase').textContent.includes('Predictions')) {
+                    // Submit prediction
+                    socket.emit('submit-prediction', {
+                        gameCode: gameData.gameCode,
+                        playerId: gameData.playerId,
+                        predictedChoice: option
+                    });
+                    log(`🔮 Predicted: ${option}`, 'info');
+                } else if (document.getElementById('gamePhase').textContent.includes('Answering')) {
+                    // Submit answer
+                    socket.emit('submit-answer', {
+                        gameCode: gameData.gameCode,
+                        playerId: gameData.playerId,
+                        answer: option
+                    });
+                    log(`✋ Answered: ${option}`, 'success');
+                }
+            }
+        }
+
+        // Start timer
+        function startTimer(duration) {
+            let timeLeft = duration;
+            updateTimer(timeLeft);
+            
+            const timerInterval = setInterval(() => {
+                timeLeft--;
+                updateTimer(timeLeft);
+                
+                if (timeLeft <= 0) {
+                    clearInterval(timerInterval);
+                }
+            }, 1000);
+        }
+
+        // Update timer
+        function updateTimer(seconds) {
+            const timerElement = document.getElementById('timer');
+            timerElement.textContent = seconds;
+            
+            if (seconds <= 5) {
+                timerElement.classList.add('warning');
+            } else {
+                timerElement.classList.remove('warning');
+            }
+        }
+
+        // Start game
+        function startGame() {
+            if (socket && gameData.isHost) {
+                socket.emit('start-game', {
+                    gameCode: gameData.gameCode,
+                    hostId: gameData.playerId
+                });
+                log('🚀 Starting game...', 'info');
+            }
+        }
+
+        // Show winner animation
+        function showWinnerAnimation(winner) {
+            const animationElement = document.getElementById('winnerAnimation');
+            const winnerNameElement = document.getElementById('winnerName');
+            
+            winnerNameElement.textContent = winner.playerName;
+            animationElement.style.display = 'flex';
+        }
+
+        // Hide winner animation
+        function hideWinnerAnimation() {
+            document.getElementById('winnerAnimation').style.display = 'none';
+        }
+
+        // Initialize
+        log('🎯 Frontend test interface loaded', 'success');
+        log('📝 Instructions:', 'info');
+        log('1. Enter server URL (default: http://localhost:3005)', 'info');
+        log('2. Click "Create Game" to host or enter game code and "Join Game"', 'info');
+        log('3. Wait for 4 players, then "Start Game"', 'info');
+        log('4. Follow the game flow through 12 rounds', 'info');
+    </script>
+</body>
+</html>

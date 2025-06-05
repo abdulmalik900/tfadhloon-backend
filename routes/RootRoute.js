@@ -3,8 +3,7 @@ import gameRoutes from './gameRoutes.js';
 
 const router = express.Router();
 
-
 // Game routes
-router.use('/games', gameRoutes);
+router.use('/game', gameRoutes);
 
 export default router;

@@ -107,15 +107,20 @@ const gameRoomSchema = new mongoose.Schema({
     type: String,
     required: true
   },
-  players: [playerSchema],
-  status: {
+  players: [playerSchema],  status: {
     type: String,
     enum: ['waiting', 'playing', 'finished'],
     default: 'waiting'
   },
   currentRound: {
     type: Number,
-    default: 0  },  totalRounds: {
+    default: 0
+  },
+  currentPlayer: {
+    type: String,
+    default: null
+  },
+  totalRounds: {
     type: Number,
     default: 12  // 4 players × 3 cycles = 12 rounds
   },rounds: [roundSchema],  maxPlayers: {
@@ -136,6 +141,18 @@ const gameRoomSchema = new mongoose.Schema({
     roundBreak: {
       type: Number,
       default: 5 // seconds
+    },
+    scoreDisplayTime: {
+      type: Number,
+      default: 3 // seconds - time to show scores after each round
+    },
+    finalScoreDisplayTime: {
+      type: Number,
+      default: 10 // seconds - time to show final leaderboard
+    },
+    winnerAnimationTime: {
+      type: Number,
+      default: 10 // seconds - time for winner animation
     }
   },
   usedQuestions: [{
@@ -155,6 +172,11 @@ const gameRoomSchema = new mongoose.Schema({
   lastActivity: {
     type: Date,
     default: Date.now
+  },
+  gamePhase: {
+    type: String,
+    enum: ['waiting', 'playing', 'predicting', 'answering', 'scoring', 'final_scores', 'winner_animation', 'finished'],
+    default: 'waiting'
   }
 });
 

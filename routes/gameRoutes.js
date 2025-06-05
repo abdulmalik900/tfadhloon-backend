@@ -4,13 +4,22 @@ import {
   joinGameRoom,
   getGameRoom,
   startGame,
-  getQuestion,
+  getCurrentQuestion,
   submitPredictions,
   submitAnswer,
+  completeScoring,
+  showWinnerAnimation,
+  completeGame,
   getLeaderboard,
   leaveGameRoom,
   getGameState,
-  validateGameCode
+  validateGameCode,
+  getPlayers,
+  getGameSettings,
+  getRounds,
+  getCurrentRound,
+  getGameStats,
+  markPlayerReady
 } from '../controller/gameController.js';
 
 const router = Router();
@@ -45,13 +54,26 @@ router.post('/join', joinGameRoom);
 router.get('/validate/:gameCode', validateGameCode);
 router.get('/:gameCode', getGameRoom);
 router.get('/:gameCode/state', getGameState);
+router.get('/:gameCode/players', getPlayers);
+router.get('/:gameCode/settings', getGameSettings);
+router.get('/:gameCode/rounds', getRounds);
+router.get('/:gameCode/current-round', getCurrentRound);
+router.get('/:gameCode/stats', getGameStats);
+router.post('/:gameCode/ready', markPlayerReady);
 router.post('/:gameCode/start', startGame);
-router.post('/:gameCode/leave', leaveGameRoom);
+router.delete('/:gameCode/leave', leaveGameRoom);
 
 // Game flow
-router.get('/:gameCode/question', getQuestion);
+router.get('/:gameCode/question', getCurrentQuestion);
+router.get('/:gameCode/current-question', getCurrentQuestion); // Alternative endpoint
 router.post('/:gameCode/predictions', submitPredictions);
 router.post('/:gameCode/answer', submitAnswer);
+
+// Score display phases
+router.post('/:gameCode/complete-scoring', completeScoring);
+router.post('/:gameCode/show-winner', showWinnerAnimation);
+router.post('/:gameCode/complete-game', completeGame);
+
 router.get('/:gameCode/leaderboard', getLeaderboard);
 
 export default router;

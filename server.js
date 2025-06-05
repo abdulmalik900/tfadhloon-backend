@@ -47,6 +47,9 @@ app.use(
 
 app.use(express.json());
 
+// Serve static files for testing
+app.use(express.static('.'));
+
 // Connect to database
 if (process.env.NODE_ENV === 'production') {
   // In production (serverless), connect per request
@@ -83,7 +86,7 @@ app.get('/', (req, res) => {
 // Routes
 app.use("/api", routes);
 
-// Socket.io real-time game handling
+// Socket.io real-time game handling with score animations
 import { setupGameSocket } from './sockets/gameSocket.js';
 setupGameSocket(io);
 
