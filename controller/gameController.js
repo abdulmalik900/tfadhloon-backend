@@ -1,5 +1,6 @@
-import GameRoom from '../models/GameRoom.js';
-import Question from '../models/Question.js';
+import GameRoom from "../models/GameRoom.js";
+import Question from "../models/Question.js";
+import { getSocketInstance } from "../utils/socketInstance.js";
 
 // Create a new game room
 export const createGameRoom = async (req, res) => {
@@ -8,49 +9,52 @@ export const createGameRoom = async (req, res) => {
 
     if (!playerName || playerName.trim().length === 0) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Player name is required'
+        status: "error",
+        message: "Player name is required",
       });
     }
 
     // Generate unique game code
     const gameCode = await GameRoom.generateGameCode();
-    const hostId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const hostId = `player_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
 
     // Create new game room
     const gameRoom = new GameRoom({
       gameCode,
       hostId,
-      players: [{
-        id: hostId,
-        name: playerName.trim(),
-        score: 0,
-        isReady: false,
-        isConnected: true,
-        joinedAt: new Date()
-      }]
+      players: [
+        {
+          id: hostId,
+          name: playerName.trim(),
+          score: 0,
+          isReady: false,
+          isConnected: true,
+          joinedAt: new Date(),
+        },
+      ],
     });
 
     await gameRoom.save();
 
     res.status(201).json({
-      status: 'success',
-      message: 'Game room created successfully',
+      status: "success",
+      message: "Game room created successfully",
       data: {
         gameCode,
         hostId,
         roomId: gameRoom._id,
         player: gameRoom.players[0],
         maxPlayers: 4,
-        gameSettings: gameRoom.gameSettings
-      }
+        gameSettings: gameRoom.gameSettings,
+      },
     });
-
   } catch (error) {
-    console.error('Create game room error:', error);
+    console.error("Create game room error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to create game room'
+      status: "error",
+      message: "Failed to create game room",
     });
   }
 };
@@ -62,53 +66,69 @@ export const joinGameRoom = async (req, res) => {
 
     if (!gameCode || !playerName) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Game code and player name are required'
+        status: "error",
+        message: "Game code and player name are required",
       });
     }
 
-    const gameRoom = await GameRoom.findOne({ gameCode, status: 'waiting' });
+    const gameRoom = await GameRoom.findOne({ gameCode, status: "waiting" });
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found or already started'
+        status: "error",
+        message: "Game room not found or already started",
       });
     }
 
     if (gameRoom.players.length >= 4) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Game room is full (maximum 4 players)'
+        status: "error",
+        message: "Game room is full (maximum 4 players)",
       });
     }
 
     // Check if player name already exists
-    const existingPlayer = gameRoom.players.find(p => p.name.toLowerCase() === playerName.toLowerCase());
+    const existingPlayer = gameRoom.players.find(
+      (p) => p.name.toLowerCase() === playerName.toLowerCase()
+    );
     if (existingPlayer) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Player name already taken'
+        status: "error",
+        message: "Player name already taken",
       });
     }
 
-    const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+    const playerId = `player_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
     const newPlayer = {
       id: playerId,
       name: playerName.trim(),
       score: 0,
       isReady: false,
       isConnected: true,
-      joinedAt: new Date()
+      joinedAt: new Date(),
     };
-
     gameRoom.players.push(newPlayer);
     await gameRoom.updateActivity();
 
+    // Emit socket event to notify all players in the room about the new player
+    const io = getSocketInstance();
+    if (io) {
+      io.to(gameCode).emit("roomUpdate", {
+        players: gameRoom.players,
+        status: gameRoom.status,
+        gamePhase: gameRoom.gamePhase,
+      });
+
+      // Also emit player-update for compatibility with different components
+      io.to(gameCode).emit("player-update", gameRoom.players);
+    }
+
     res.status(200).json({
-      status: 'success',
-      message: 'Successfully joined the game room',
+      status: "success",
+      message: "Successfully joined the game room",
       data: {
         gameCode,
         playerId,
@@ -117,15 +137,14 @@ export const joinGameRoom = async (req, res) => {
         totalPlayers: gameRoom.players.length,
         maxPlayers: 4,
         gameSettings: gameRoom.gameSettings,
-        canStart: gameRoom.players.length === 4
-      }
+        canStart: gameRoom.players.length === 4,
+      },
     });
-
   } catch (error) {
-    console.error('Join game room error:', error);
+    console.error("Join game room error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to join game room'
+      status: "error",
+      message: "Failed to join game room",
     });
   }
 };
@@ -137,8 +156,8 @@ export const validateGameCode = async (req, res) => {
 
     if (!gameCode || gameCode.length !== 4) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Invalid game code format'
+        status: "error",
+        message: "Invalid game code format",
       });
     }
 
@@ -146,27 +165,27 @@ export const validateGameCode = async (req, res) => {
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
-    }    res.status(200).json({
-      status: 'success',
+    }
+    res.status(200).json({
+      status: "success",
       data: {
         gameCode,
         isValid: true,
         roomStatus: gameRoom.status,
         playerCount: gameRoom.players.length,
         maxPlayers: 4,
-        canJoin: gameRoom.status === 'waiting' && gameRoom.players.length < 4,
-        isGameActive: gameRoom.status === 'playing'
-      }
+        canJoin: gameRoom.status === "waiting" && gameRoom.players.length < 4,
+        isGameActive: gameRoom.status === "playing",
+      },
     });
-
   } catch (error) {
-    console.error('Validate game code error:', error);
+    console.error("Validate game code error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to validate game code'
+      status: "error",
+      message: "Failed to validate game code",
     });
   }
 };
@@ -177,18 +196,18 @@ export const getGameRoom = async (req, res) => {
     const { gameCode } = req.params;
 
     const gameRoom = await GameRoom.findOne({ gameCode })
-      .populate('rounds.questionId')
-      .populate('usedQuestions');
+      .populate("rounds.questionId")
+      .populate("usedQuestions");
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: {
         gameRoom: {
           gameCode: gameRoom.gameCode,
@@ -201,16 +220,15 @@ export const getGameRoom = async (req, res) => {
           leaderboard: gameRoom.leaderboard,
           rounds: gameRoom.rounds,
           createdAt: gameRoom.createdAt,
-          lastActivity: gameRoom.lastActivity
-        }
-      }
+          lastActivity: gameRoom.lastActivity,
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Get game room error:', error);
+    console.error("Get game room error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to get game room'
+      status: "error",
+      message: "Failed to get game room",
     });
   }
 };
@@ -225,32 +243,32 @@ export const startGame = async (req, res) => {
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
     // Verify host permission
     if (gameRoom.hostId !== hostId) {
       return res.status(403).json({
-        status: 'error',
-        message: 'Only the host can start the game'
+        status: "error",
+        message: "Only the host can start the game",
       });
     }
 
     // Check if exactly 4 players
     if (gameRoom.players.length !== 4) {
       return res.status(400).json({
-        status: 'error',
-        message: `Need exactly 4 players to start. Currently have ${gameRoom.players.length} players.`
+        status: "error",
+        message: `Need exactly 4 players to start. Currently have ${gameRoom.players.length} players.`,
       });
     }
 
     // Check if game already started
-    if (gameRoom.status !== 'waiting') {
+    if (gameRoom.status !== "waiting") {
       return res.status(400).json({
-        status: 'error',
-        message: 'Game has already started or finished'
+        status: "error",
+        message: "Game has already started or finished",
       });
     }
 
@@ -259,32 +277,31 @@ export const startGame = async (req, res) => {
     const firstPlayer = gameRoom.players[randomIndex];
 
     // Update game status
-    gameRoom.status = 'playing';
+    gameRoom.status = "playing";
     gameRoom.currentRound = 1;
     gameRoom.currentPlayer = firstPlayer.id;
     await gameRoom.updateActivity();
 
     res.status(200).json({
-      status: 'success',
-      message: 'Game started successfully',
+      status: "success",
+      message: "Game started successfully",
       data: {
         gameCode,
         currentRound: gameRoom.currentRound,
         totalRounds: gameRoom.totalRounds,
         currentPlayer: {
           id: firstPlayer.id,
-          name: firstPlayer.name
+          name: firstPlayer.name,
         },
         players: gameRoom.players,
-        gameSettings: gameRoom.gameSettings
-      }
+        gameSettings: gameRoom.gameSettings,
+      },
     });
-
   } catch (error) {
-    console.error('Start game error:', error);
+    console.error("Start game error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to start game'
+      status: "error",
+      message: "Failed to start game",
     });
   }
 };
@@ -294,20 +311,22 @@ export const getCurrentQuestion = async (req, res) => {
   try {
     const { gameCode } = req.params;
 
-    const gameRoom = await GameRoom.findOne({ gameCode, status: 'playing' });
+    const gameRoom = await GameRoom.findOne({ gameCode, status: "playing" });
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Active game room not found'
+        status: "error",
+        message: "Active game room not found",
       });
     }
 
     // Check if current round already has a question
-    const currentRoundData = gameRoom.rounds.find(r => r.roundNumber === gameRoom.currentRound);
-    
+    const currentRoundData = gameRoom.rounds.find(
+      (r) => r.roundNumber === gameRoom.currentRound
+    );
+
     let question;
-    
+
     if (currentRoundData && currentRoundData.questionId) {
       // Use existing question for this round
       question = await Question.findById(currentRoundData.questionId);
@@ -316,21 +335,21 @@ export const getCurrentQuestion = async (req, res) => {
       const usedQuestionIds = gameRoom.usedQuestions;
       question = await Question.aggregate([
         { $match: { _id: { $nin: usedQuestionIds } } },
-        { $sample: { size: 1 } }
+        { $sample: { size: 1 } },
       ]);
 
       if (!question || question.length === 0) {
         return res.status(404).json({
-          status: 'error',
-          message: 'No available questions'
+          status: "error",
+          message: "No available questions",
         });
       }
 
       question = question[0];
-      
+
       // Add question to used questions
       gameRoom.usedQuestions.push(question._id);
-      
+
       // Create or update round data
       if (currentRoundData) {
         currentRoundData.questionId = question._id;
@@ -341,44 +360,45 @@ export const getCurrentQuestion = async (req, res) => {
           questionId: question._id,
           predictions: [],
           startedAt: new Date(),
-          isCompleted: false
+          isCompleted: false,
         });
       }
-      
+
       await gameRoom.save();
     }
 
     // Get current player info
-    const currentPlayer = gameRoom.players.find(p => p.id === gameRoom.currentPlayer);
+    const currentPlayer = gameRoom.players.find(
+      (p) => p.id === gameRoom.currentPlayer
+    );
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: {
         roundNumber: gameRoom.currentRound,
         totalRounds: gameRoom.totalRounds,
         currentPlayer: {
           id: currentPlayer.id,
-          name: currentPlayer.name
+          name: currentPlayer.name,
         },
         question: {
           id: question._id,
           questionText: question.questionText,
           optionA: question.optionA,
           optionB: question.optionB,
-          category: question.category
+          category: question.category,
         },
         gameSettings: {
           predictionTime: gameRoom.gameSettings.predictionTime,
-          answerTime: gameRoom.gameSettings.answerTime
-        }
-      }
+          answerTime: gameRoom.gameSettings.answerTime,
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Get current question error:', error);
+    console.error("Get current question error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to get current question'
+      status: "error",
+      message: "Failed to get current question",
     });
   }
 };
@@ -389,47 +409,55 @@ export const submitPredictions = async (req, res) => {
     const { gameCode } = req.params;
     const { playerId, predictedChoice } = req.body;
 
-    if (!playerId || !predictedChoice || !['A', 'B'].includes(predictedChoice)) {
+    if (
+      !playerId ||
+      !predictedChoice ||
+      !["A", "B"].includes(predictedChoice)
+    ) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Valid player ID and prediction choice (A or B) are required'
+        status: "error",
+        message: "Valid player ID and prediction choice (A or B) are required",
       });
     }
 
-    const gameRoom = await GameRoom.findOne({ gameCode, status: 'playing' });
+    const gameRoom = await GameRoom.findOne({ gameCode, status: "playing" });
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Active game room not found'
+        status: "error",
+        message: "Active game room not found",
       });
     }
 
     // Get current round
-    const currentRound = gameRoom.rounds.find(r => r.roundNumber === gameRoom.currentRound);
-    
+    const currentRound = gameRoom.rounds.find(
+      (r) => r.roundNumber === gameRoom.currentRound
+    );
+
     if (!currentRound) {
       return res.status(400).json({
-        status: 'error',
-        message: 'No active round found'
+        status: "error",
+        message: "No active round found",
       });
     }
 
     // Check if player is the current player (can't predict for themselves)
     if (playerId === gameRoom.currentPlayer) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Current player cannot make predictions'
+        status: "error",
+        message: "Current player cannot make predictions",
       });
     }
 
     // Check if player already made a prediction for this round
-    const existingPrediction = currentRound.predictions.find(p => p.playerId === playerId);
-    
+    const existingPrediction = currentRound.predictions.find(
+      (p) => p.playerId === playerId
+    );
+
     if (existingPrediction) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Player has already made a prediction for this round'
+        status: "error",
+        message: "Player has already made a prediction for this round",
       });
     }
 
@@ -439,7 +467,7 @@ export const submitPredictions = async (req, res) => {
       questionId: currentRound.questionId,
       targetPlayerId: gameRoom.currentPlayer,
       predictedChoice,
-      submittedAt: new Date()
+      submittedAt: new Date(),
     });
 
     await gameRoom.save();
@@ -449,22 +477,21 @@ export const submitPredictions = async (req, res) => {
     const receivedPredictions = currentRound.predictions.length;
 
     res.status(200).json({
-      status: 'success',
-      message: 'Prediction submitted successfully',
+      status: "success",
+      message: "Prediction submitted successfully",
       data: {
         roundNumber: gameRoom.currentRound,
         predictionsReceived: receivedPredictions,
         predictionsExpected: expectedPredictions,
         allPredictionsReceived: receivedPredictions === expectedPredictions,
-        canCurrentPlayerAnswer: receivedPredictions === expectedPredictions
-      }
+        canCurrentPlayerAnswer: receivedPredictions === expectedPredictions,
+      },
     });
-
   } catch (error) {
-    console.error('Submit predictions error:', error);
+    console.error("Submit predictions error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to submit prediction'
+      status: "error",
+      message: "Failed to submit prediction",
     });
   }
 };
@@ -475,44 +502,46 @@ export const submitAnswer = async (req, res) => {
     const { gameCode } = req.params;
     const { playerId, answer } = req.body;
 
-    if (!playerId || !answer || !['A', 'B'].includes(answer)) {
+    if (!playerId || !answer || !["A", "B"].includes(answer)) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Valid player ID and answer (A or B) are required'
+        status: "error",
+        message: "Valid player ID and answer (A or B) are required",
       });
     }
 
-    const gameRoom = await GameRoom.findOne({ gameCode, status: 'playing' });
+    const gameRoom = await GameRoom.findOne({ gameCode, status: "playing" });
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Active game room not found'
+        status: "error",
+        message: "Active game room not found",
       });
     }
 
     // Verify it's the current player
     if (playerId !== gameRoom.currentPlayer) {
       return res.status(403).json({
-        status: 'error',
-        message: 'Only the current player can submit an answer'
+        status: "error",
+        message: "Only the current player can submit an answer",
       });
     }
 
     // Get current round
-    const currentRound = gameRoom.rounds.find(r => r.roundNumber === gameRoom.currentRound);
-    
+    const currentRound = gameRoom.rounds.find(
+      (r) => r.roundNumber === gameRoom.currentRound
+    );
+
     if (!currentRound) {
       return res.status(400).json({
-        status: 'error',
-        message: 'No active round found'
+        status: "error",
+        message: "No active round found",
       });
     }
 
     if (currentRound.playerAnswer) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Answer already submitted for this round'
+        status: "error",
+        message: "Answer already submitted for this round",
       });
     }
 
@@ -520,8 +549,8 @@ export const submitAnswer = async (req, res) => {
     const expectedPredictions = gameRoom.players.length - 1;
     if (currentRound.predictions.length < expectedPredictions) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Waiting for all player predictions'
+        status: "error",
+        message: "Waiting for all player predictions",
       });
     }
 
@@ -533,37 +562,38 @@ export const submitAnswer = async (req, res) => {
     // Calculate scores for predictions
     let scores = {};
     let roundScoreDetails = [];
-    
-    currentRound.predictions.forEach(prediction => {
+
+    currentRound.predictions.forEach((prediction) => {
       const isCorrect = prediction.predictedChoice === answer;
       prediction.isCorrect = isCorrect;
-      
-      const player = gameRoom.players.find(p => p.id === prediction.playerId);
+
+      const player = gameRoom.players.find((p) => p.id === prediction.playerId);
       const pointsEarned = isCorrect ? 10 : 0;
-      
+
       if (isCorrect) {
-        scores[prediction.playerId] = (scores[prediction.playerId] || 0) + pointsEarned;
+        scores[prediction.playerId] =
+          (scores[prediction.playerId] || 0) + pointsEarned;
       }
-      
+
       roundScoreDetails.push({
         playerId: prediction.playerId,
-        playerName: player ? player.name : 'Unknown',
+        playerName: player ? player.name : "Unknown",
         predictedChoice: prediction.predictedChoice,
         isCorrect: isCorrect,
-        pointsEarned: pointsEarned
+        pointsEarned: pointsEarned,
       });
     });
 
     // Update player scores
-    gameRoom.players.forEach(player => {
+    gameRoom.players.forEach((player) => {
       if (scores[player.id]) {
         player.score += scores[player.id];
       }
     });
 
     // Set game phase to scoring for 3 seconds
-    gameRoom.gamePhase = 'scoring';
-    
+    gameRoom.gamePhase = "scoring";
+
     // Determine next player and round
     let isGameComplete = false;
     let nextPlayer = null;
@@ -573,9 +603,12 @@ export const submitAnswer = async (req, res) => {
       isGameComplete = true;
     } else {
       // Move to next round with next player
-      const currentPlayerIndex = gameRoom.players.findIndex(p => p.id === gameRoom.currentPlayer);
-      const nextPlayerIndex = (currentPlayerIndex + 1) % gameRoom.players.length;
-      
+      const currentPlayerIndex = gameRoom.players.findIndex(
+        (p) => p.id === gameRoom.currentPlayer
+      );
+      const nextPlayerIndex =
+        (currentPlayerIndex + 1) % gameRoom.players.length;
+
       gameRoom.currentRound += 1;
       gameRoom.currentPlayer = gameRoom.players[nextPlayerIndex].id;
       nextPlayer = gameRoom.players[nextPlayerIndex];
@@ -586,35 +619,39 @@ export const submitAnswer = async (req, res) => {
     await gameRoom.save();
 
     res.status(200).json({
-      status: 'success',
-      message: 'Answer submitted successfully',
+      status: "success",
+      message: "Answer submitted successfully",
       data: {
         roundNumber: currentRound.roundNumber,
         currentPlayerAnswer: answer,
-        gamePhase: 'scoring', // Show scores for 3 seconds
+        gamePhase: "scoring", // Show scores for 3 seconds
         scoreDisplayTime: gameRoom.gameSettings.scoreDisplayTime,
         roundScoreDetails,
         scoreUpdates: scores,
         isGameComplete,
         nextRound: isGameComplete ? null : gameRoom.currentRound,
-        nextPlayer: nextPlayer ? { id: nextPlayer.id, name: nextPlayer.name } : null,
-        currentScores: gameRoom.players.map(p => ({
-          playerId: p.id,
-          playerName: p.name,
-          score: p.score,
-          rank: 0 // Will be calculated in leaderboard
-        })).sort((a, b) => b.score - a.score).map((p, index) => ({
-          ...p,
-          rank: index + 1
-        }))
-      }
+        nextPlayer: nextPlayer
+          ? { id: nextPlayer.id, name: nextPlayer.name }
+          : null,
+        currentScores: gameRoom.players
+          .map((p) => ({
+            playerId: p.id,
+            playerName: p.name,
+            score: p.score,
+            rank: 0, // Will be calculated in leaderboard
+          }))
+          .sort((a, b) => b.score - a.score)
+          .map((p, index) => ({
+            ...p,
+            rank: index + 1,
+          })),
+      },
     });
-
   } catch (error) {
-    console.error('Submit answer error:', error);
+    console.error("Submit answer error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to submit answer'
+      status: "error",
+      message: "Failed to submit answer",
     });
   }
 };
@@ -624,59 +661,60 @@ export const completeScoring = async (req, res) => {
   try {
     const { gameCode } = req.params;
 
-    const gameRoom = await GameRoom.findOne({ gameCode, gamePhase: 'scoring' });
+    const gameRoom = await GameRoom.findOne({ gameCode, gamePhase: "scoring" });
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found or not in scoring phase'
+        status: "error",
+        message: "Game room not found or not in scoring phase",
       });
     }
 
     // Check if game is complete
     if (gameRoom.currentRound > gameRoom.totalRounds) {
       // Transition to final scores
-      gameRoom.gamePhase = 'final_scores';
-      gameRoom.status = 'finished';
+      gameRoom.gamePhase = "final_scores";
+      gameRoom.status = "finished";
       await gameRoom.save();
 
       res.status(200).json({
-        status: 'success',
-        message: 'Game completed - showing final scores',
+        status: "success",
+        message: "Game completed - showing final scores",
         data: {
-          gamePhase: 'final_scores',
+          gamePhase: "final_scores",
           finalScoreDisplayTime: gameRoom.gameSettings.finalScoreDisplayTime,
           leaderboard: gameRoom.leaderboard,
-          winner: gameRoom.leaderboard[0]
-        }
+          winner: gameRoom.leaderboard[0],
+        },
       });
     } else {
       // Continue to next round
-      gameRoom.gamePhase = 'playing';
+      gameRoom.gamePhase = "playing";
       await gameRoom.save();
 
-      const currentPlayer = gameRoom.players.find(p => p.id === gameRoom.currentPlayer);
+      const currentPlayer = gameRoom.players.find(
+        (p) => p.id === gameRoom.currentPlayer
+      );
 
       res.status(200).json({
-        status: 'success',
-        message: 'Moving to next round',
+        status: "success",
+        message: "Moving to next round",
         data: {
-          gamePhase: 'playing',
+          gamePhase: "playing",
           currentRound: gameRoom.currentRound,
           totalRounds: gameRoom.totalRounds,
           currentPlayer: {
             id: currentPlayer.id,
-            name: currentPlayer.name
-          }
-        }
+            name: currentPlayer.name,
+          },
+        },
       });
     }
-
   } catch (error) {
-    console.error('Complete scoring error:', error);
+    console.error("Complete scoring error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to complete scoring'
+      status: "error",
+      message: "Failed to complete scoring",
     });
   }
 };
@@ -686,42 +724,49 @@ export const showWinnerAnimation = async (req, res) => {
   try {
     const { gameCode } = req.params;
 
-    const gameRoom = await GameRoom.findOne({ gameCode, gamePhase: 'final_scores' });
+    const gameRoom = await GameRoom.findOne({
+      gameCode,
+      gamePhase: "final_scores",
+    });
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found or not in final scores phase'
+        status: "error",
+        message: "Game room not found or not in final scores phase",
       });
     }
 
-    gameRoom.gamePhase = 'winner_animation';
+    gameRoom.gamePhase = "winner_animation";
     await gameRoom.save();
 
     const winner = gameRoom.leaderboard[0];
 
     res.status(200).json({
-      status: 'success',
-      message: 'Showing winner animation',
+      status: "success",
+      message: "Showing winner animation",
       data: {
-        gamePhase: 'winner_animation',
+        gamePhase: "winner_animation",
         winnerAnimationTime: gameRoom.gameSettings.winnerAnimationTime,
         winner: {
           playerId: winner.playerId,
           playerName: winner.playerName,
           score: winner.score,
-          accuracy: winner.correctPredictions ? 
-            (winner.correctPredictions / (gameRoom.totalRounds - gameRoom.totalRounds / 4) * 100).toFixed(1) : 0
+          accuracy: winner.correctPredictions
+            ? (
+                (winner.correctPredictions /
+                  (gameRoom.totalRounds - gameRoom.totalRounds / 4)) *
+                100
+              ).toFixed(1)
+            : 0,
         },
-        leaderboard: gameRoom.leaderboard
-      }
+        leaderboard: gameRoom.leaderboard,
+      },
     });
-
   } catch (error) {
-    console.error('Show winner animation error:', error);
+    console.error("Show winner animation error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to show winner animation'
+      status: "error",
+      message: "Failed to show winner animation",
     });
   }
 };
@@ -731,38 +776,40 @@ export const completeGame = async (req, res) => {
   try {
     const { gameCode } = req.params;
 
-    const gameRoom = await GameRoom.findOne({ gameCode, gamePhase: 'winner_animation' });
+    const gameRoom = await GameRoom.findOne({
+      gameCode,
+      gamePhase: "winner_animation",
+    });
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found or not in winner animation phase'
+        status: "error",
+        message: "Game room not found or not in winner animation phase",
       });
     }
 
-    gameRoom.gamePhase = 'finished';
-    gameRoom.status = 'finished';
+    gameRoom.gamePhase = "finished";
+    gameRoom.status = "finished";
     await gameRoom.save();
 
     res.status(200).json({
-      status: 'success',
-      message: 'Game completed - ready to return to main screen',
+      status: "success",
+      message: "Game completed - ready to return to main screen",
       data: {
-        gamePhase: 'finished',
+        gamePhase: "finished",
         finalStats: {
           totalRounds: gameRoom.totalRounds,
           totalPlayers: gameRoom.players.length,
           winner: gameRoom.leaderboard[0],
-          completedAt: new Date()
-        }
-      }
+          completedAt: new Date(),
+        },
+      },
     });
-
   } catch (error) {
-    console.error('Complete game error:', error);
+    console.error("Complete game error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to complete game'
+      status: "error",
+      message: "Failed to complete game",
     });
   }
 };
@@ -777,21 +824,23 @@ export const getGameState = async (req, res) => {
     const { gameCode } = req.params;
 
     const gameRoom = await GameRoom.findOne({ gameCode })
-      .populate('rounds.questionId', 'questionText choices')
+      .populate("rounds.questionId", "questionText choices")
       .lean();
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
     // Get current round info
-    const currentRound = gameRoom.rounds.find(r => r.roundNumber === gameRoom.currentRound);
-    
+    const currentRound = gameRoom.rounds.find(
+      (r) => r.roundNumber === gameRoom.currentRound
+    );
+
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: {
         gameCode: gameRoom.gameCode,
         gamePhase: gameRoom.gamePhase,
@@ -799,27 +848,28 @@ export const getGameState = async (req, res) => {
         currentRound: gameRoom.currentRound,
         totalRounds: gameRoom.totalRounds,
         currentPlayer: gameRoom.currentPlayer,
-        players: gameRoom.players.map(p => ({
+        players: gameRoom.players.map((p) => ({
           id: p.id,
           name: p.name,
           score: p.score,
-          isConnected: p.isConnected
+          isConnected: p.isConnected,
         })),
-        currentQuestion: currentRound ? {
-          questionText: currentRound.questionId?.questionText,
-          choices: currentRound.questionId?.choices,
-          roundNumber: currentRound.roundNumber
-        } : null,
+        currentQuestion: currentRound
+          ? {
+              questionText: currentRound.questionId?.questionText,
+              choices: currentRound.questionId?.choices,
+              roundNumber: currentRound.roundNumber,
+            }
+          : null,
         gameSettings: gameRoom.gameSettings,
-        leaderboard: gameRoom.leaderboard
-      }
+        leaderboard: gameRoom.leaderboard,
+      },
     });
-
   } catch (error) {
-    console.error('Get game state error:', error);
+    console.error("Get game state error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to get game state'
+      status: "error",
+      message: "Failed to get game state",
     });
   }
 };
@@ -833,8 +883,8 @@ export const getLeaderboard = async (req, res) => {
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
@@ -842,21 +892,20 @@ export const getLeaderboard = async (req, res) => {
     await gameRoom.updateLeaderboard();
 
     res.status(200).json({
-      status: 'success',
+      status: "success",
       data: {
         leaderboard: gameRoom.leaderboard,
         gamePhase: gameRoom.gamePhase,
         currentRound: gameRoom.currentRound,
         totalRounds: gameRoom.totalRounds,
-        isFinished: gameRoom.status === 'finished'
-      }
+        isFinished: gameRoom.status === "finished",
+      },
     });
-
   } catch (error) {
-    console.error('Get leaderboard error:', error);
+    console.error("Get leaderboard error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to get leaderboard'
+      status: "error",
+      message: "Failed to get leaderboard",
     });
   }
 };
@@ -869,8 +918,8 @@ export const leaveGameRoom = async (req, res) => {
 
     if (!playerId) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Player ID is required'
+        status: "error",
+        message: "Player ID is required",
       });
     }
 
@@ -878,8 +927,8 @@ export const leaveGameRoom = async (req, res) => {
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
@@ -887,19 +936,18 @@ export const leaveGameRoom = async (req, res) => {
     await gameRoom.removePlayer(playerId);
 
     res.status(200).json({
-      status: 'success',
-      message: 'Player left the game room',
+      status: "success",
+      message: "Player left the game room",
       data: {
         gameCode,
-        remainingPlayers: gameRoom.players.length
-      }
+        remainingPlayers: gameRoom.players.length,
+      },
     });
-
   } catch (error) {
-    console.error('Leave game room error:', error);
+    console.error("Leave game room error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to leave game room'
+      status: "error",
+      message: "Failed to leave game room",
     });
   }
 };
@@ -913,28 +961,27 @@ export const getPlayers = async (req, res) => {
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
     res.status(200).json({
-      status: 'success',
-      message: 'Players retrieved successfully',
+      status: "success",
+      message: "Players retrieved successfully",
       data: {
         gameCode,
         players: gameRoom.players,
         totalPlayers: gameRoom.players.length,
         maxPlayers: gameRoom.maxPlayers,
-        hostId: gameRoom.hostId
-      }
+        hostId: gameRoom.hostId,
+      },
     });
-
   } catch (error) {
-    console.error('Get players error:', error);
+    console.error("Get players error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to retrieve players'
+      status: "error",
+      message: "Failed to retrieve players",
     });
   }
 };
@@ -948,29 +995,28 @@ export const getGameSettings = async (req, res) => {
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
     res.status(200).json({
-      status: 'success',
-      message: 'Game settings retrieved successfully',
+      status: "success",
+      message: "Game settings retrieved successfully",
       data: {
         gameCode,
         settings: gameRoom.gameSettings,
         totalRounds: gameRoom.totalRounds,
         maxPlayers: gameRoom.maxPlayers,
         gamePhase: gameRoom.gamePhase,
-        status: gameRoom.status
-      }
+        status: gameRoom.status,
+      },
     });
-
   } catch (error) {
-    console.error('Get game settings error:', error);
+    console.error("Get game settings error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to retrieve game settings'
+      status: "error",
+      message: "Failed to retrieve game settings",
     });
   }
 };
@@ -980,32 +1026,33 @@ export const getRounds = async (req, res) => {
   try {
     const { gameCode } = req.params;
 
-    const gameRoom = await GameRoom.findOne({ gameCode }).populate('rounds.questionId');
+    const gameRoom = await GameRoom.findOne({ gameCode }).populate(
+      "rounds.questionId"
+    );
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
     res.status(200).json({
-      status: 'success',
-      message: 'Rounds retrieved successfully',
+      status: "success",
+      message: "Rounds retrieved successfully",
       data: {
         gameCode,
         rounds: gameRoom.rounds,
         totalRounds: gameRoom.totalRounds,
         currentRound: gameRoom.currentRound,
-        completedRounds: gameRoom.rounds.filter(r => r.isCompleted).length
-      }
+        completedRounds: gameRoom.rounds.filter((r) => r.isCompleted).length,
+      },
     });
-
   } catch (error) {
-    console.error('Get rounds error:', error);
+    console.error("Get rounds error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to retrieve rounds'
+      status: "error",
+      message: "Failed to retrieve rounds",
     });
   }
 };
@@ -1015,35 +1062,38 @@ export const getCurrentRound = async (req, res) => {
   try {
     const { gameCode } = req.params;
 
-    const gameRoom = await GameRoom.findOne({ gameCode }).populate('rounds.questionId');
+    const gameRoom = await GameRoom.findOne({ gameCode }).populate(
+      "rounds.questionId"
+    );
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
-    const currentRound = gameRoom.rounds.find(r => r.roundNumber === gameRoom.currentRound);
+    const currentRound = gameRoom.rounds.find(
+      (r) => r.roundNumber === gameRoom.currentRound
+    );
 
     res.status(200).json({
-      status: 'success',
-      message: 'Current round retrieved successfully',
+      status: "success",
+      message: "Current round retrieved successfully",
       data: {
         gameCode,
         currentRound: currentRound || null,
         roundNumber: gameRoom.currentRound,
         gamePhase: gameRoom.gamePhase,
         currentPlayer: gameRoom.currentPlayer,
-        totalRounds: gameRoom.totalRounds
-      }
+        totalRounds: gameRoom.totalRounds,
+      },
     });
-
   } catch (error) {
-    console.error('Get current round error:', error);
+    console.error("Get current round error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to retrieve current round'
+      status: "error",
+      message: "Failed to retrieve current round",
     });
   }
 };
@@ -1057,15 +1107,20 @@ export const getGameStats = async (req, res) => {
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
-    const completedRounds = gameRoom.rounds.filter(r => r.isCompleted).length;
-    const totalPredictions = gameRoom.rounds.reduce((sum, round) => sum + round.predictions.length, 0);
-    const correctPredictions = gameRoom.rounds.reduce((sum, round) => 
-      sum + round.predictions.filter(p => p.isCorrect).length, 0);
+    const completedRounds = gameRoom.rounds.filter((r) => r.isCompleted).length;
+    const totalPredictions = gameRoom.rounds.reduce(
+      (sum, round) => sum + round.predictions.length,
+      0
+    );
+    const correctPredictions = gameRoom.rounds.reduce(
+      (sum, round) => sum + round.predictions.filter((p) => p.isCorrect).length,
+      0
+    );
 
     const stats = {
       gameCode,
@@ -1079,28 +1134,35 @@ export const getGameStats = async (req, res) => {
       progress: `${completedRounds}/${gameRoom.totalRounds}`,
       totalPredictions,
       correctPredictions,
-      predictionAccuracy: totalPredictions > 0 ? ((correctPredictions / totalPredictions) * 100).toFixed(1) + '%' : '0%',
-      averageScore: gameRoom.players.length > 0 ? 
-        Math.round(gameRoom.players.reduce((sum, p) => sum + p.score, 0) / gameRoom.players.length) : 0,
-      topScore: Math.max(...gameRoom.players.map(p => p.score), 0),
+      predictionAccuracy:
+        totalPredictions > 0
+          ? ((correctPredictions / totalPredictions) * 100).toFixed(1) + "%"
+          : "0%",
+      averageScore:
+        gameRoom.players.length > 0
+          ? Math.round(
+              gameRoom.players.reduce((sum, p) => sum + p.score, 0) /
+                gameRoom.players.length
+            )
+          : 0,
+      topScore: Math.max(...gameRoom.players.map((p) => p.score), 0),
       createdAt: gameRoom.createdAt,
       lastActivity: gameRoom.lastActivity,
-      gameSettings: gameRoom.gameSettings
+      gameSettings: gameRoom.gameSettings,
     };
 
     res.status(200).json({
-      status: 'success',
-      message: 'Game statistics retrieved successfully',
+      status: "success",
+      message: "Game statistics retrieved successfully",
       data: {
-        stats
-      }
+        stats,
+      },
     });
-
   } catch (error) {
-    console.error('Get game stats error:', error);
+    console.error("Get game stats error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to retrieve game statistics'
+      status: "error",
+      message: "Failed to retrieve game statistics",
     });
   }
 };
@@ -1113,8 +1175,8 @@ export const markPlayerReady = async (req, res) => {
 
     if (!playerId) {
       return res.status(400).json({
-        status: 'error',
-        message: 'Player ID is required'
+        status: "error",
+        message: "Player ID is required",
       });
     }
 
@@ -1122,17 +1184,17 @@ export const markPlayerReady = async (req, res) => {
 
     if (!gameRoom) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Game room not found'
+        status: "error",
+        message: "Game room not found",
       });
     }
 
-    const player = gameRoom.players.find(p => p.id === playerId);
+    const player = gameRoom.players.find((p) => p.id === playerId);
 
     if (!player) {
       return res.status(404).json({
-        status: 'error',
-        message: 'Player not found in this room'
+        status: "error",
+        message: "Player not found in this room",
       });
     }
 
@@ -1140,12 +1202,16 @@ export const markPlayerReady = async (req, res) => {
     player.isReady = !player.isReady;
     await gameRoom.save();
 
-    const readyPlayers = gameRoom.players.filter(p => p.isReady).length;
-    const allReady = readyPlayers === gameRoom.players.length && gameRoom.players.length === gameRoom.maxPlayers;
+    const readyPlayers = gameRoom.players.filter((p) => p.isReady).length;
+    const allReady =
+      readyPlayers === gameRoom.players.length &&
+      gameRoom.players.length === gameRoom.maxPlayers;
 
     res.status(200).json({
-      status: 'success',
-      message: `Player ${player.isReady ? 'marked as ready' : 'marked as not ready'}`,
+      status: "success",
+      message: `Player ${
+        player.isReady ? "marked as ready" : "marked as not ready"
+      }`,
       data: {
         gameCode,
         playerId,
@@ -1154,15 +1220,14 @@ export const markPlayerReady = async (req, res) => {
         readyPlayers,
         totalPlayers: gameRoom.players.length,
         allReady,
-        canStartGame: allReady
-      }
+        canStartGame: allReady,
+      },
     });
-
   } catch (error) {
-    console.error('Mark player ready error:', error);
+    console.error("Mark player ready error:", error);
     res.status(500).json({
-      status: 'error',
-      message: 'Failed to mark player ready'
+      status: "error",
+      message: "Failed to mark player ready",
     });
   }
 };
