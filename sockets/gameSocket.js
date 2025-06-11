@@ -2,7 +2,7 @@
 import GameRoom from "../models/GameRoom.js";
 import Question from "../models/Question.js";
 
-// Store active timers and game states
+// Store active timers and game state
 const gameTimers = new Map();
 const gameStates = new Map();
 
